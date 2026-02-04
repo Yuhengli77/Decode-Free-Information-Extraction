@@ -1,4 +1,4 @@
-# Decode-Free-Web-Extraction-for-Search-Agents
+# Decode-Free Web Extraction for Search Agents
 
 This project studies **index-based (decode-light) web evidence extraction** as a low-latency alternative to **generative summarization** in search agents.  
 Instead of generating long summaries token-by-token, the extractor outputs **short indices/spans** over a block-indexed webpage, and a deterministic post-processor reconstructs the extracted evidence.
