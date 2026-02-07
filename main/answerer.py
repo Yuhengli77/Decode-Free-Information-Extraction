@@ -13,9 +13,7 @@ SYSTEM_PROMPT = (
     "You are a careful QA assistant.\n"
     "Answer the user question using only the provided extracted webpage markdown documents.\n"
     "If information is missing, say you cannot determine the answer from provided evidence.\n"
-    "Output JSON only with schema: "
-    "{\"answer\": string, \"source_ids\": [string, ...]}.\n"
-    "source_ids must contain only ids from the provided documents."
+    "Output JSON only with schema: {\"answer\": string}."
 )
 
 
@@ -105,6 +103,8 @@ def answer_query_from_extract_results(
 ) -> Dict[str, Any]:
     if not query.strip():
         raise ValueError("query must be non-empty.")
+    if not isinstance(extract_results, list):
+        raise ValueError("extract_results must be a list of document dicts.")
     if not extract_results:
         raise ValueError("extract_results must be non-empty.")
 
@@ -128,7 +128,7 @@ def answer_query_from_extract_results(
         f"Question:\n{query}\n\n"
         "Extracted documents:\n"
         f"{_build_documents_prompt(docs)}\n\n"
-        "Return JSON with keys `answer` and `source_ids`."
+        "Return JSON with key `answer`."
     )
 
     completion = client.chat.completions.create(
@@ -143,37 +143,8 @@ def answer_query_from_extract_results(
     message = completion.choices[0].message.content or ""
     parsed = _extract_json_object(message)
     answer = str(parsed.get("answer", "")).strip()
-    raw_source_ids = parsed.get("source_ids", [])
-    if not isinstance(raw_source_ids, list):
-        raise ValueError(f"Invalid response schema: {parsed}")
-
-    docs_by_id = {doc["doc_id"]: doc for doc in docs}
-    available_source_ids = set(docs_by_id)
-    source_ids: List[str] = []
-    seen = set()
-    for value in raw_source_ids:
-        source_id = str(value).strip()
-        if source_id and source_id in available_source_ids and source_id not in seen:
-            source_ids.append(source_id)
-            seen.add(source_id)
-
-    sources: List[Dict[str, str]] = []
-    source_urls: List[str] = []
-    for source_id in source_ids:
-        doc = docs_by_id[source_id]
-        source = {
-            "doc_id": source_id,
-            "title": doc["title"],
-            "url": doc["url"],
-        }
-        sources.append(source)
-        if doc["url"]:
-            source_urls.append(doc["url"])
 
     return {
         "answer": answer,
-        "source_ids": source_ids,
-        "source_urls": source_urls,
-        "sources": sources,
         "documents_used": len(docs),
     }

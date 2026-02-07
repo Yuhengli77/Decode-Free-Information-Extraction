@@ -4,17 +4,30 @@ from typing import Any, Dict, List, Sequence
 
 def reconstruct_html_from_block_ids(
     selected_ids: Sequence[int],
-    indexed_blocks: Sequence[Dict[str, Any]],
+    page_payload: Dict[str, Any],
     *,
     keep_page_order: bool = True,
     wrap_container: bool = True,
-) -> str:
-    if not selected_ids:
-        return ""
+) -> Dict[str, Any]:
+    if not isinstance(page_payload, dict):
+        raise ValueError(
+            "page_payload must be a dict with keys: "
+            "`url`, `title`, `indexed_blocks`."
+        )
+
+    page_url = str(page_payload.get("url") or "").strip()
+    page_title = str(page_payload.get("title") or "").strip()
+    indexed_blocks = page_payload.get("indexed_blocks")
+    if not isinstance(indexed_blocks, list):
+        raise ValueError("`indexed_blocks` must be a list.")
 
     id_to_text: Dict[int, str] = {}
     page_order: List[int] = []
     for block in indexed_blocks:
+        if not isinstance(block, dict):
+            raise ValueError("Each indexed block must be a dict with `id` and `text`.")
+        if "id" not in block or "text" not in block:
+            raise ValueError("Each indexed block must include keys `id` and `text`.")
         block_id = int(block["id"])
         id_to_text[block_id] = str(block["text"])
         page_order.append(block_id)
@@ -39,8 +52,26 @@ def reconstruct_html_from_block_ids(
         if html:
             chunks.append(html)
 
-    fragment = "\n".join(chunks)
-    if not wrap_container or not fragment:
-        return fragment
+    body_fragment = "\n".join(chunks)
+    if wrap_container and body_fragment:
+        body_fragment = f'<div class="extracted-evidence">\n{body_fragment}\n</div>'
 
-    return f'<div class="extracted-evidence">\n{fragment}\n</div>'
+    head = f"<title>{page_title}</title>" if page_title else ""
+    html_doc = (
+        "<!doctype html>\n"
+        "<html>\n"
+        "<head>\n"
+        f"{head}\n"
+        "</head>\n"
+        "<body>\n"
+        f"{body_fragment}\n"
+        "</body>\n"
+        "</html>"
+    )
+
+    return {
+        "url": page_url,
+        "title": page_title,
+        "selected_ids": ordered_ids,
+        "html": html_doc,
+    }
