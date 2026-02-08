@@ -39,3 +39,57 @@ We (1) reproduce the core pipeline from the reference work, (2) improve extracti
 - Evaluate:
   - **Task quality** (e.g., EM/F1 / success rate)
   - **Latency** (end-to-end + breakdown: fetch / extract / reason)
+
+---
+
+## System Achitecture
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+│                         INPUT: Raw HTML Page + URL/Title + User Query                        │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+                                               │
+                                               ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+│                             DECODE-FREE EXTRACTION PIPELINE                                  │
+├──────────────────────────────────────────────────────────────────────────────────────────────┤
+│  1) HTML CLEANING + CHUNKING + BLOCK INDEXING                                                │
+│     ┌─────────────────────────────────────────────┐   ┌───────────────────────────────────┐  │
+│     │ Noise Removal                               │   │ Chunk & Index Builder             │  │
+│     │ - remove script/style/noscript              │   │ - split into blocks               │  │
+│     │ - normalize whitespace                      │   │ - assign block ids (0..N-1)       │  │
+│     └─────────────────────────────────────────────┘   └───────────────────────────────────┘  │
+│                                      │                                                       │
+│                                      ▼                                                       │
+│     page_payload = {url, title, indexed_blocks: [{"id": i, "text": ...}, ...]}               │
+│                                                                                              │
+│  2) QUERY-AWARE INDEX EXTRACTION  (main/index_extractor.py)                                  │
+│     ┌─────────────────────────────────────────────┐   ┌───────────────────────────────────┐  │
+│     │ Prompt Construction                         │   │ LLM Response Parser               │  │
+│     │ - QE mode: query provided                   │   │ - parse JSON / fenced JSON        │  │
+│     │ - ME mode: query empty (main extraction)    │   │ - expect "block_intervals"        │  │
+│     └─────────────────────────────────────────────┘   └───────────────────────────────────┘  │
+│                                      │                                                       │
+│                                      ▼                                                       │
+│     model output: {"block_intervals": [[start_id, end_id], ...]} OR {"block_intervals":"NA"} │
+│                                                                                              │
+│  3) DETERMINISTIC ID EXPANSION + RECONSTRUCTION  (main/reconstructor.py)                     │
+│     - normalize intervals (swap when start > end)                                            │
+│     - expand intervals to valid ids, deduplicate, optional top_k                             │
+│     - keep page order, rebuild extracted HTML fragment/document                              │
+│                                                                                              │
+│  4) EVIDENCE FORMATTING  (main/formatter.py)                                                 │
+│     - reconstruct extracted HTML                                                             │
+│     - convert HTML to markdown evidence                                                      │
+│                                                                                              │
+│  5) OPTIONAL QA ON EXTRACTED DOCS  (main/answerer.py)                                        │
+│     - aggregate extracted markdown docs + query                                              │
+│     - output JSON: {"answer": "..."}                                                         │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+                                               │
+                                               ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+│                    OUTPUT: selected_ids + extracted HTML + extracted Markdown                │
+│                          (+ optional final answer from answerer)                             │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+```
