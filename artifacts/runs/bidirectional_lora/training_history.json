@@ -1,0 +1,158 @@
+{
+  "best_epoch": 5,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.508442438173294,
+      "validation": {
+        "threshold": 0.58,
+        "overall": {
+          "precision": 0.8775189740905522,
+          "recall": 0.83825,
+          "f1": 0.8574351105996675
+        },
+        "by_question_type": {
+          "bridge": {
+            "precision": 0.8620019436345967,
+            "recall": 0.8142594859241126,
+            "f1": 0.8374508261211644
+          },
+          "comparison": {
+            "precision": 0.9427792915531336,
+            "recall": 0.9453551912568307,
+            "f1": 0.9440654843110505
+          }
+        },
+        "num_examples": 2000,
+        "loss": 0.3715524408817291
+      }
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.28879791189432147,
+      "validation": {
+        "threshold": 0.78,
+        "overall": {
+          "precision": 0.903705636743215,
+          "recall": 0.86575,
+          "f1": 0.884320735444331
+        },
+        "by_question_type": {
+          "bridge": {
+            "precision": 0.8873873873873874,
+            "recall": 0.8439412484700123,
+            "f1": 0.8651191969887078
+          },
+          "comparison": {
+            "precision": 0.9737569060773481,
+            "recall": 0.9631147540983607,
+            "f1": 0.9684065934065934
+          }
+        },
+        "num_examples": 2000,
+        "loss": 0.2591006714105606
+      }
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.24276538120508193,
+      "validation": {
+        "threshold": 0.55,
+        "overall": {
+          "precision": 0.9046398359395027,
+          "recall": 0.88225,
+          "f1": 0.8933046449816479
+        },
+        "by_question_type": {
+          "bridge": {
+            "precision": 0.8884676145339653,
+            "recall": 0.8604651162790697,
+            "f1": 0.8742421887144413
+          },
+          "comparison": {
+            "precision": 0.9741847826086957,
+            "recall": 0.9795081967213115,
+            "f1": 0.9768392370572208
+          }
+        },
+        "num_examples": 2000,
+        "loss": 0.2823848919868469
+      }
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.20637291361689566,
+      "validation": {
+        "threshold": 0.91,
+        "overall": {
+          "precision": 0.9189820825759543,
+          "recall": 0.88475,
+          "f1": 0.9015412049420457
+        },
+        "by_question_type": {
+          "bridge": {
+            "precision": 0.9047466324567031,
+            "recall": 0.8632190942472461,
+            "f1": 0.8834951456310679
+          },
+          "comparison": {
+            "precision": 0.9795361527967258,
+            "recall": 0.9808743169398907,
+            "f1": 0.9802047781569966
+          }
+        },
+        "num_examples": 2000,
+        "loss": 0.23682058960199356
+      }
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.18040089183449745,
+      "validation": {
+        "threshold": 0.89,
+        "overall": {
+          "precision": 0.9003231419338802,
+          "recall": 0.9055,
+          "f1": 0.9029041505671195
+        },
+        "by_question_type": {
+          "bridge": {
+            "precision": 0.8836075563680682,
+            "recall": 0.8873929008567931,
+            "f1": 0.8854961832061068
+          },
+          "comparison": {
+            "precision": 0.9743589743589743,
+            "recall": 0.9863387978142076,
+            "f1": 0.9803122878479293
+          }
+        },
+        "num_examples": 2000,
+        "loss": 0.23702838867902756
+      }
+    }
+  ],
+  "best_validation": {
+    "threshold": 0.89,
+    "overall": {
+      "precision": 0.9003231419338802,
+      "recall": 0.9055,
+      "f1": 0.9029041505671195
+    },
+    "by_question_type": {
+      "bridge": {
+        "precision": 0.8836075563680682,
+        "recall": 0.8873929008567931,
+        "f1": 0.8854961832061068
+      },
+      "comparison": {
+        "precision": 0.9743589743589743,
+        "recall": 0.9863387978142076,
+        "f1": 0.9803122878479293
+      }
+    },
+    "num_examples": 2000,
+    "loss": 0.23702838867902756
+  },
+  "best_threshold": 0.89
+}
