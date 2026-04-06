@@ -1,87 +1,76 @@
-# Single-Pass Evidence Extraction via Hidden State Classification
+# Decode-Free Information Extraction
 
 Classify which passages are relevant to a multi-hop question by extracting hidden states from a single LLM forward pass — no autoregressive decoding required.
 
+## Motivation
+
+Evidence selection — identifying which passages are relevant given a query — is a core component of RAG pipelines, open-domain QA, and multi-hop reasoning systems. Existing approaches each have fundamental limitations:
+
+| Method | Approach | Key Limitation |
+|--------|----------|----------------|
+| Dual-Tower | Encode query and passages independently, rank by cosine similarity | No cross-attention; no inter-passage interaction |
+| Cross-Encoder | Concatenate query with **each** passage, score independently | Rich query-passage interaction, but **zero inter-passage interaction**; encoder context windows (512 tokens) too small to fit all passages |
+| LLM Generation | Prompt an LLM to judge relevance via generated text | Powerful reasoning, but **autoregressive decoding is slow** — even a "yes/no" per passage requires sequential token generation |
+
+For multi-hop questions — where the relevance of one passage depends on information in another — independent scoring is theoretically insufficient. Yet the only approach that enables cross-passage reasoning (LLM generation) pays a heavy cost in decoding latency.
+
+**Key insight:** We can combine the best of both worlds. LLMs offer context windows large enough (32K+ tokens) to fit a query and all candidate passages in a single sequence — far exceeding encoder limits. But instead of generating text, we directly classify each passage from its hidden state at the EOS token position. This gives us inter-passage interaction with zero decoding cost.
+
 ## Method
 
-Given a query and N candidate passages, we concatenate them into a single input sequence and run one forward pass through a frozen LLM. The hidden state at each passage's EOS token is fed into a linear classification head to predict relevance (0/1). This enables inter-passage interaction while avoiding the cost of autoregressive generation.
+Given a query and N candidate passages, the input is concatenated into a single sequence:
 
-We compare two backbone variants:
-- **Causal LM** (Qwen3-0.6B): unidirectional inter-passage interaction
-- **Bidirectional** (Qwen3-Embedding-0.6B): full bidirectional inter-passage interaction
+```
+Question: {query} Passage 1 Title: ... {text} [EOS] | Passage 2 ... [EOS] ... Passage N ... [EOS]
+```
 
-Against four baselines:
-- **Dual-Tower** (all-MiniLM-L6-v2): cosine similarity, no interaction
-- **ModernBERT Dual-Tower** (hotchpotch/ModernBERT-embedding-CMNBRL): HotpotQA-related embedding baseline
-- **Cross-Encoder** (ms-marco-MiniLM-L6-v2): query-passage interaction only
-- **HotpotQA Cross-Encoder** (OloriBern/hotpotqa-mixer-2000): HotpotQA-related reranking baseline
+A single forward pass produces hidden states at every position. For each passage, we extract the hidden state at its EOS token and apply a binary classifier:
 
-We also evaluate LoRA fine-tuning on top of both frozen LLM backbones.
+```
+label_i = sigmoid(W · h_EOS_i + b)  →  0 (irrelevant) or 1 (relevant)
+```
 
-## Training Setup Notes
+We investigate two backbone variants:
 
-The models in the results table are not trained under the same supervision setting:
+- **Causal LM (Qwen3-0.6B):** Each EOS token attends to the query and all preceding passages (unidirectional inter-passage interaction), leveraging general reasoning from next-token-prediction pretraining.
+- **Bidirectional (Qwen3-Embedding-0.6B):** Each EOS token attends to all passages in both directions (full inter-passage interaction), with a contrastive-learning pretrained backbone.
 
-- **Generic off-the-shelf baselines:** `Dual-Tower` and `Cross-Encoder` are used as-is, without HotpotQA-specific training in this project.
-- **Our HotpotQA-trained models:** `Causal LM`, `Bidirectional`, `Causal LM + LoRA`, and `Bidirectional + LoRA` all use HotpotQA supervision in our pipeline. The frozen variants train only the linear classifier head, while the LoRA variants additionally adapt the backbone through LoRA.
-- **External in-domain baselines:** `ModernBERT Dual-Tower` and `HotpotQA Cross-Encoder` are external models that were already fine-tuned on HotpotQA-related data before evaluation here.
+Both are evaluated with a frozen backbone (only the linear head is trained) and with LoRA fine-tuning.
 
-This distinction matters when comparing numbers: the generic baselines test out-of-the-box retrieval/reranking strength, while the frozen / LoRA variants and the two in-domain baselines benefit from task-specific HotpotQA supervision.
+| Method | Query-Passage Interaction | Inter-Passage Interaction | Decoding Cost |
+|--------|--------------------------|--------------------------|---------------|
+| Dual-Tower | None | None | None |
+| Cross-Encoder | Full (bidirectional) | None | None |
+| LLM Generation | Full (causal) | Unidirectional | O(T) tokens |
+| **Ours (Causal)** | Full (causal) | Unidirectional | **None** |
+| **Ours (Bidirectional)** | Full (bidirectional) | Full | **None** |
 
 ## Architecture
 
 ### Causal LM
-![Causal LM Architecture](assets/architecture_causal.png)
+![Causal LM Architecture](figures/architecture_causal.png)
 
-### Bidirectional Variant
-![Bidirectional Architecture](assets/architecture_bidirectional.png)
+### Bidirectional
+![Bidirectional Architecture](figures/architecture_bidirectional.png)
 
-## Project Structure
+## Experiments
 
-```
-├── experiment.ipynb        # Main end-to-end experiment notebook (run on Colab)
-├── src/
-│   ├── config.py           # Experiment configuration
-│   ├── data.py             # HotpotQA data loading and preprocessing
-│   ├── modeling.py         # Backbone loading, tokenization, classifier model
-│   ├── train_eval.py       # Training loop, evaluation, threshold tuning
-│   └── utils.py            # Helpers (seed, device, JSON I/O, formatting)
-├── scripts/
-│   └── draw_architecture.py # Architecture diagram generation
-├── assets/                  # Generated figures (architecture diagrams)
-├── proposal/
-│   └── proposal.md         # Research proposal
-└── artifacts/runs/         # Saved results (generated after running experiments)
-    ├── causal/
-    ├── causal_lora/
-    ├── bidirectional/
-    ├── bidirectional_lora/
-    ├── dual_tower/
-    ├── modernbert_dual_tower/
-    ├── cross_encoder/
-    └── hotpotqa_cross_encoder/
-```
+### Dataset: HotpotQA (Distractor Setting)
 
-## Requirements
+Each example contains a multi-hop question and 10 paragraphs (2 gold + 8 distractors), with sentence-level supporting fact annotations converted to paragraph-level binary labels. This dataset is ideal because multi-hop questions naturally require cross-paragraph reasoning, directly testing whether inter-passage interaction improves evidence selection.
 
-```
-torch
-transformers
-datasets
-sentence-transformers
-tqdm
-matplotlib
-```
+### Baselines
 
-## Usage
+- **Dual-Tower** (all-MiniLM-L6-v2): cosine similarity, no interaction
+- **Cross-Encoder** (ms-marco-MiniLM-L6-v2): query-passage interaction only
+- **ModernBERT Dual-Tower** (ModernBERT-embedding-CMNBRL): HotpotQA-related embedding model
+- **HotpotQA Cross-Encoder** (hotpotqa-mixer-2000): HotpotQA-related reranker
 
-1. Zip the `src/` folder and upload to Google Colab
-2. Upload `experiment.ipynb` to Colab
-3. Run all cells sequentially
+**Training setup note:** Generic baselines (Dual-Tower, Cross-Encoder) are used off-the-shelf. Our models and the two in-domain baselines use HotpotQA supervision. Frozen variants train only the linear head; LoRA variants additionally adapt the backbone.
 
-The notebook handles data downloading, model loading, training, evaluation, and visualization. Results are saved to `artifacts/runs/`.
+### Results
 
-## Results (HotpotQA Distractor, Paragraph-level F1)
+Paragraph-level F1 on 7,345 test examples:
 
 | Method | Overall F1 | Bridge F1 | Comparison F1 |
 |--------|-----------|-----------|---------------|
@@ -89,9 +78,45 @@ The notebook handles data downloading, model loading, training, evaluation, and 
 | ModernBERT Dual-Tower | 0.553 | 0.512 | 0.712 |
 | Cross-Encoder | 0.578 | 0.567 | 0.630 |
 | HotpotQA Cross-Encoder | 0.782 | 0.742 | 0.944 |
-| Bidirectional | 0.604 | 0.588 | 0.667 |
-| Causal LM | 0.675 | 0.659 | 0.737 |
-| **Bidirectional + LoRA** | **0.890** | **0.869** | **0.977** |
+| Causal LM (frozen) | 0.675 | 0.659 | 0.737 |
+| Bidirectional (frozen) | 0.604 | 0.588 | 0.667 |
 | Causal LM + LoRA | 0.884 | 0.861 | 0.977 |
+| **Bidirectional + LoRA** | **0.890** | **0.869** | **0.977** |
 
-Among the models trained within this project, the frozen causal LM is the strongest frozen variant, and LoRA fine-tuning gives the best overall results, with the bidirectional LoRA model narrowly achieving the top F1. Among baselines, the strongest generic baseline is the standard Cross-Encoder, while the strongest externally trained in-domain baseline is the HotpotQA Cross-Encoder.
+![F1 Comparison](figures/f1_comparison.png)
+![Training Curves](figures/training_curves.png)
+
+### Analysis
+
+**Frozen backbones already encode relevance signals.** Even without fine-tuning, the causal LM (0.675 F1) outperforms both generic baselines — a dual-tower model (0.519) and a cross-encoder (0.578) — using only a linear head on frozen hidden states. This suggests pretrained LLM representations carry meaningful passage-relevance information that a simple classifier can extract.
+
+**Causal attention outperforms bidirectional in the frozen setting.** The frozen causal LM (0.675) beats the frozen bidirectional model (0.604), despite the latter having full inter-passage attention. This likely reflects the stronger general-purpose representations from next-token-prediction pretraining versus the bidirectional model's contrastive-learning objective, which was optimized for embedding similarity rather than discriminative classification.
+
+**LoRA fine-tuning closes the gap and achieves the best results.** With LoRA, both backbones reach ~0.89 F1, surpassing the HotpotQA-specific cross-encoder baseline (0.782) by a wide margin. The bidirectional model (0.890) narrowly edges out the causal variant (0.884), suggesting that full inter-passage attention provides a small advantage once the backbone is adapted to the task.
+
+## Project Structure
+
+```
+├── main.py                  # Experiment entry point
+├── src/
+│   ├── config.py            # Experiment configuration
+│   ├── data.py              # HotpotQA data loading and preprocessing
+│   ├── modeling.py          # Backbone loading, tokenization, classifier
+│   ├── train_eval.py        # Training loop, evaluation, threshold tuning
+│   ├── baselines.py         # Dual-tower and cross-encoder baselines
+│   ├── visualize.py         # Result plotting
+│   └── utils.py             # Helpers (seed, device, JSON I/O)
+├── scripts/
+│   └── draw_architecture.py # Architecture diagram generation
+├── figures/                 # All figures
+├── tests/                   # Unit tests
+├── artifacts/runs/          # Saved experiment results (JSON)
+└── requirements.txt
+```
+
+## Usage
+
+```bash
+pip install -r requirements.txt
+python main.py
+```

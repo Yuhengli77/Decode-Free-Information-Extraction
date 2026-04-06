@@ -241,9 +241,9 @@ def draw_diagram(mode, title, backbone_label, output_name):
             ha="center", va="center", fontsize=15, weight="bold")
 
     plt.tight_layout()
-    plt.savefig(f"assets/{output_name}.png", dpi=200, bbox_inches="tight", facecolor="white")
-    plt.savefig(f"assets/{output_name}.pdf", bbox_inches="tight", facecolor="white")
-    print(f"Saved assets/{output_name}.png and assets/{output_name}.pdf")
+    plt.savefig(f"figures/{output_name}.png", dpi=200, bbox_inches="tight", facecolor="white")
+    plt.savefig(f"figures/{output_name}.pdf", bbox_inches="tight", facecolor="white")
+    print(f"Saved figures/{output_name}.png and figures/{output_name}.pdf")
     plt.close(fig)
 
 
